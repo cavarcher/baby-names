@@ -380,7 +380,7 @@ sibling’s name.</p>
 <pre><code>## Warning: restored &#39;dplyr&#39;</code></pre>
 <pre><code>## 
 ## The downloaded binary packages are in
-##  C:\Users\willi\AppData\Local\Temp\RtmpMbKJRz\downloaded_packages</code></pre>
+##  C:\Users\willi\AppData\Local\Temp\Rtmpgd4hAn\downloaded_packages</code></pre>
 <pre class="r"><code>library(dplyr)</code></pre>
 <pre><code>## 
 ## Attaching package: &#39;dplyr&#39;</code></pre>
@@ -396,7 +396,7 @@ sibling’s name.</p>
 <pre><code>## package &#39;tidyverse&#39; successfully unpacked and MD5 sums checked
 ## 
 ## The downloaded binary packages are in
-##  C:\Users\willi\AppData\Local\Temp\RtmpMbKJRz\downloaded_packages</code></pre>
+##  C:\Users\willi\AppData\Local\Temp\Rtmpgd4hAn\downloaded_packages</code></pre>
 <pre class="r"><code>library(tidyverse)</code></pre>
 <pre><code>## ── Attaching packages
 ## ───────────────────────────────────────
@@ -424,7 +424,7 @@ install.packages(&quot;data.table&quot;)</code></pre>
 <pre><code>## Warning: restored &#39;data.table&#39;</code></pre>
 <pre><code>## 
 ## The downloaded binary packages are in
-##  C:\Users\willi\AppData\Local\Temp\RtmpMbKJRz\downloaded_packages</code></pre>
+##  C:\Users\willi\AppData\Local\Temp\Rtmpgd4hAn\downloaded_packages</code></pre>
 <pre class="r"><code>library(data.table)</code></pre>
 <pre><code>## 
 ## Attaching package: &#39;data.table&#39;
@@ -481,7 +481,6 @@ delta_from_median_vector &lt;- function(names, v_name, v_sex){
   #print(summarize(filtered_list, s = sd(rank)))
   
   med_deltas &lt;- data.frame()
-  
   for (i in params$begin_year:params$end_year){
     #filter for only the current year&#39;s row
     #should return either one or zero rows
@@ -606,6 +605,7 @@ for(i in 1:min(nrow(unique_names),params$num_names)){
       print(paste(percent,&quot;% completed&quot;))
       last_percent &lt;- percent
     }
+
   }
   
   #error handling for names that do not have a rank every year.

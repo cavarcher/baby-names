@@ -86,7 +86,6 @@ delta_from_median_vector <- function(names, v_name, v_sex){
   #print(summarize(filtered_list, s = sd(rank)))
   
   med_deltas <- data.frame()
-  
   for (i in params$begin_year:params$end_year){
     #filter for only the current year's row
     #should return either one or zero rows
@@ -217,6 +216,7 @@ for(i in 1:min(nrow(unique_names),params$num_names)){
       print(paste(percent,"% completed"))
       last_percent <- percent
     }
+
   }
   
   #error handling for names that do not have a rank every year.
