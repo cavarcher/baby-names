@@ -5,8 +5,11 @@ date: "2023-02-02"
 output: html_document
 params: 
   url: "https://www.ssa.gov/oact/babynames/names.zip"
-  target_name: "Rose"
-  target_sex: "F"
+  target_name: "Name"
+  target_sex: 
+    input: radioButtons
+    label: "Sex"
+    choices: c("Male", "Female")
   begin_year: 
     label: "Begin Year"
     value: 1950
@@ -15,11 +18,27 @@ params:
     max: 2021
     step: 1
     sep: ""
-  end_year: 2021
-  num_names: 100
-  comparison_sex: "M"
-  num_displayed: 10
-  display_progress: TRUE
+  end_year:
+    label: "Begin Year"
+    value: 2021
+    input: slider
+    min: 1880
+    max: 2021
+    step: 1
+    sep: ""
+  num_names: 
+    label: "Number of Names to Compare"
+    value: 100
+    input: text
+  comparison_sex: radioButtons(label = "Sex", choices = c("Male", "Female"), selected = "Male")
+  num_displayed:  
+    label: "Number of Names to Display"
+    value: 10
+    input: text
+  display_progress:
+    label: "Display Console"
+    input: checkbox
+    value: FALSE
 ---
 
 ```{r setup, include=FALSE}
@@ -42,6 +61,8 @@ install.packages("ggplot2")
 library(ggplot2)
 install.packages("data.table")
 library(data.table)
+install.packages("shiny")
+library(shiny)
 ```
 
 # Required Variables
