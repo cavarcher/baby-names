@@ -3,10 +3,28 @@ title: "Baby Names Analysis"
 author: "Connor Lennard"
 date: "2023-02-02"
 output: html_document
+params: 
+  url: "https://www.ssa.gov/oact/babynames/names.zip"
+  target_name: "Rose"
+  target_sex: "F"
+  begin_year: 
+    label: "Begin Year"
+    value: 1950
+    input: slider
+    min: 1880
+    max: 2021
+    step: 1
+    sep: ""
+  end_year: 2021
+  num_names: 100
+  comparison_sex: "M"
+  num_displayed: 10
+  display_progress: TRUE
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN="https://cran.r-project.org/"))
 ```
 
 ## Baby Names Analysis
@@ -22,6 +40,8 @@ install.packages("tidyverse")
 library(tidyverse)
 install.packages("ggplot2")
 library(ggplot2)
+install.packages("data.table")
+library(data.table)
 ```
 
 # Required Variables
@@ -29,103 +49,20 @@ library(ggplot2)
 This is where you can change the source URL if necessary, as well as the years to look at for analysis and the target name for comparison
 
 ```{r}
-url <- "https://www.ssa.gov/oact/babynames/names.zip"
-target_name <- "Rose"
-target_sex <- "F"
-begin_year <- 1880
-end_year <- 2021
+#url <- "https://www.ssa.gov/oact/babynames/names.zip"
+#target_name <- "Rose"
+#target_sex <- "F"
+#begin_year <- 1880
+#end_year <- 2021
+#num_names <- 1000
+#comparison_sex <- "M"
+#num_displayed <- 10
+#display_progress <- TRUE
 ```
 
 # Functions
 
 These functions are called by the later code.
-
-## Load_Data
-
-This downloads the .txt files from the url specified to the R workspace. Data has a row number, name, gender and count. The names are ordered by gender and then by name. If the count is less than 5, the name is not included in the data.
-
-```{r}
-load_data <- function(url){
-  #Download the baby names .zip from Social Security Administration
-  download.file(url, "babynames.zip")
-  unzip("babynames.zip")
-}
-```
-
-## Build_Data_Frame
-
-This function returns a data frame constructed from the .txt files in the R workspace. The name data is broken out by year so the first for loop iterates through the specified year files and builds the data frame. It also adds the year as a column, orders based on count and then adds rank as the final column.
-
-```{r}
-build_data_frame <- function(firstYear, lastYear){
-  total_names_by_year <- data.frame()
-  
-  #Read each file from 1880 to 2021
-  for (x in firstYear:lastYear){
-    
-    # reads the initial table in from the .txt
-    # 3 columns: name, sex and count. 
-    # need to add year and then add onto total data frame
-    # source files are ordered by sex (F then M) and then by count desc
-    year_names <- read.table(paste("yob",x,".txt",sep=""), 
-                             header=FALSE, 
-                             sep=",")
-    
-    #create a vector that is the same length as the data frame with the year in each row
-    year_vector <-rep(c(x),each=nrow(year_names))
-    
-    #add the year as the fourth column
-    year_names <- cbind(year_names, year_vector)
-    
-    #name the columns
-    names(year_names) <- c("name", "sex", "count", "year")
-    
-    #order the names by popularity
-    year_names <- year_names[ order(-year_names$count),]
-    
-    #add rank as the fifth column
-    year_names <- year_names %>%
-      mutate(rank = row_number())
-    
-    #Add the final data frame for the year onto total_names_by_year
-    total_names_by_year <- rbind(total_names_by_year,year_names)
-  }
-  
-  #name the columns in total_names_by_year
-  #I did this here to avoid using an attribute[5] with a vector[0]
-  colnames(total_names_by_year) <- c("name","sex","count","year", "rank")
-  
-  return(total_names_by_year)
-}
-```
-
-## Compare_Names
-
-A simple function to call a complex ggplot2 comparison of two names. This makes it easier to tweak the visual results in one place
-
-```{r}
-compare_names <- function(total_names_by_year, first_name, first_sex, second_name, second_sex){
-  total_names_by_year %>%
-    filter((name==first_name & sex==first_sex) | (name==second_name & sex==second_sex)) %>%
-    ggplot()+
-    geom_point(mapping=aes(x=year, y=rank, color=name))+
-    geom_line(mapping=aes(x=year, y=rank, color=name))+
-    labs(title=paste("Rank of",first_name,"and",second_name))+
-    scale_color_manual(values = c("blue","red"))+
-    scale_y_reverse()+
-    facet_wrap(~name, scales ="free")
-}
-```
-
-## Vector_Difference Simple function to find the difference in the sum of two vectors. Used for sake of clarity in later code
-
-```{r}
-# Takes two delta vectors and returns the sum of the difference. 
-# The smaller the number, the closer the name rank
-vector_difference <- function(name_a, name_b){
- return(sum(abs(name_a - name_b)))
-} 
-```
 
 ## Delta_From_Median_Vector
 
@@ -150,16 +87,7 @@ delta_from_median_vector <- function(names, v_name, v_sex){
   
   med_deltas <- data.frame()
   
-  #Find vector with each delta
-  #for (x in 1:nrow(filtered_list)){
-    #should check for each year in range instead of each row in filtered list
-    #if no name present, count=0 so rank=max rank from that year+1
-  #  med_deltas <- rbind(med_deltas, (filtered_list[x,5]-med)/std)
-  #}
-  #Find vector with each delta
-  #should check for each year in range instead of each row in filtered list
-  #if no name present, count=0 so rank=max rank from that year+1
-  for (i in begin_year:end_year){
+  for (i in params$begin_year:params$end_year){
     #filter for only the current year's row
     #should return either one or zero rows
     year_list <- filtered_list[filtered_list$year==i,]
@@ -187,84 +115,144 @@ delta_from_median_vector <- function(names, v_name, v_sex){
 }
 ```
 
-## Find_Closest_Names
+# Code Execution
 
-This is how we find the names that are closest to our desired target. This function gets a list of deviations from the median for the target name and then iterates through our unique name list and compares each year to our target name. The difference in deviations between the target name and the current name is summed across all the called for years. The result list is ordered in ascending order based on sameness and returned for plotting.
+## SSA_Data
+
+This code will load the specified url and build a data frame with the specified years. If you want to change the year range, change the variables.
 
 ```{r}
-
-find_closest_names <- function(ssa_data, all_names, target_name, target_sex){
-  #Find the list of the target name's deviation from the median
-  target_name_delta <- delta_from_median_vector(ssa_data, target_name, target_sex)
-  # Filters out the target name (and the target name of the opposite sex)
-  filtered_name_list <- filter(all_names, name!=target_name)
+#download data from the SSA website
+download.file(params$url, "babynames.zip")
+unzip("babynames.zip")
+#build the data frame with all names between the two years
+#columns will be name, sex, count, year and rank
+ssa_data <- data.frame()
   
-  #new data frame for the result after the for loop
-  result_list <- data.frame()
-  #iterate through each name and find the delta number.
-  #add to a data frame with name, sex and delta number
-  last_percent <- -1
-  for(i in 1:nrow(filtered_name_list)){
-    #percent complete print out
-    percent <- round(i/nrow(filtered_name_list)*100)
+#Read each file from the range of years
+for (x in params$begin_year:params$end_year){
+    
+  # reads the initial table in from the .txt
+  # 3 columns: name, sex and count. 
+  # need to add year and then add onto total data frame
+  # source files are ordered by sex (F then M) and then by count desc
+  year_names <- read.table(paste("yob",x,".txt",sep=""), 
+                             header=FALSE, 
+                             sep=",")
+    
+  #create a vector that is the same length as the data frame with the year in each row
+  year_vector <-rep(c(x),each=nrow(year_names))
+    
+  #add the year as the fourth column
+  year_names <- cbind(year_names, year_vector)
+    
+  #name the columns
+  names(year_names) <- c("name", "sex", "count", "year")
+    
+  #order the names by popularity
+  year_names <- year_names[ order(-year_names$count),]
+    
+  #add rank as the fifth column
+  year_names <- year_names %>%
+    mutate(rank = row_number())
+    
+  #Add the final data frame for the year onto ssa_data
+  ssa_data <- rbind(ssa_data,year_names)
+  }
+  
+#name the columns in ssa_data
+#I did this here to avoid using an attribute[5] with a vector[0]
+colnames(ssa_data) <- c("name","sex","count","year", "rank")
+
+rownames(ssa_data) <- NULL
+```
+
+## Unique_Names
+
+Make a list of unique names from the data and find the total count over all years. You should only need to run this once.
+
+```{r}
+#Create a new data table (uses keys)
+unique_names <- data.table(ssa_data)
+#Set the key to the union of name a sex
+setkey(unique_names, name, sex)
+#Make dt a data table with unique rows for name and sex. Include a 3rd column that totals all counts of the name and sex across all years
+unique_names <- unique_names[, sum(count), by=list(name,sex)]
+#Name the columns
+names(unique_names) <- c("name", "sex", "total")
+#Order based on total in decreasing order
+unique_names <- as.data.frame(unique_names[order(unique_names$total, decreasing=TRUE),])
+#Reset the row names
+rownames(unique_names) <- NULL
+```
+
+## Optional File Write
+
+```{r}
+#Use this line to write a .csv with the full name data if desired
+
+write.csv(ssa_data, "Social_Security_Names_by_Year.csv", row.names=TRUE)
+
+write.csv(unique_names, "Unique_Names_By_Total_Count.csv", row.names=TRUE)
+```
+
+## Find the Closest Names
+
+Go through the list of name, given a target name, get a vector of all unique names ordered by sameness to the target name
+
+```{r}
+#Find the list of the target name's deviation from the median
+target_name_delta <- delta_from_median_vector(ssa_data, params$target_name, params$target_sex)
+
+#new data frame for the result after the for loop
+result_list <- data.frame()
+#iterate through each name and find the delta number.
+#add to a data frame with name, sex and delta number
+last_percent <- -1
+for(i in 1:min(nrow(unique_names),params$num_names)){
+  #percent complete print out
+  if(params$display_progress){
+    percent <- round(i/min(nrow(unique_names),params$num_names)*100)
     if(percent>last_percent){
       print(paste(percent,"% completed"))
       last_percent <- percent
     }
-    
-    #error handling for names that do not occur in every year
-    #need to improve handling here 
-    tryCatch(
-      {
-        name_i <- filtered_name_list[i,1]
-        sex_i <- filtered_name_list[i,2]
-        delta_i <- delta_from_median_vector(ssa_data, name_i, sex_i)
-        diff_i <- vector_difference(target_name_delta, delta_i)
-        result_list <- rbind(result_list, c(name_i, sex_i, as.double(diff_i)))
-      },
-      error=function(cond){
-        #Should not happen with corrected delta_from_median_vector function
-        print(paste("Dropping ",name_i,sep=""))
-      }
-    )
   }
-  colnames(result_list) <- c("name", "sex", "sameness")
-  result_list <- result_list[order(as.double(result_list$sameness)),]
-  return(result_list)
+  
+  #error handling for names that do not have a rank every year.
+  tryCatch(
+    {
+      name_i <- unique_names[i,1]
+      sex_i <- unique_names[i,2]
+      delta_i <- delta_from_median_vector(ssa_data, name_i, sex_i)
+      diff_i <- sum(abs(target_name_delta - delta_i))
+      result_list <- rbind(result_list, c(name_i, sex_i, as.double(diff_i)))
+    },
+    error=function(cond){
+      #Should not happen with corrected delta_from_median_vector function
+      print(paste("Dropping ",name_i,sep=""))
+    }
+  )
 }
+colnames(result_list) <- c("name", "sex", "difference")
+result_list <- result_list[order(as.double(result_list$difference)),]
 ```
 
-## Execute Code
+## Visualize
 
-#Loading the Data
+Visualize top names as specified in the variables. Displayed as a line graph of rank
 
 ```{r}
-#download data from the SSA website
-load_data(url)
-#build the data frame with all names between the two years
-#columns will be name, sex, count, year and rank
-ssa_data <- build_data_frame(begin_year, end_year)
-rownames(ssa_data) <- NULL
-
-# Use this line to write a .csv with the full name data if desired
-#write.csv(ssa_data, "Social_Security_Names_by_Year.csv", row.names=TRUE)
-unique_names <- unique(ssa_data[c("name", "sex")])
-
-diff_sort_list <- find_closest_names(ssa_data,
-                                     unique_names,
-                                     target_name,
-                                    target_sex)
-male_diff_sort_list <- filter(diff_sort_list, sex=="M")
-female_diff_sort_list <- filter(diff_sort_list, sex=="F")
-for (i in 1:10){
-  name_i <- male_diff_sort_list[i,1]
-  sex_i <- male_diff_sort_list[i,2]
-  print(paste("Comparing",target_name,"and",name_i))
+filtered_list <- filter(result_list, sex==params$comparison_sex)
+for (i in 1:min(params$num_displayed,nrow(result_list))){
+  name_i <- filtered_list[i,1]
+  sex_i <- filtered_list[i,2]
+  print(paste("Comparing",params$target_name,"and",name_i))
   print(
-    ggplot(filter(ssa_data,(name==target_name & sex==target_sex) | (name==name_i & sex==sex_i)))+
+    ggplot(filter(ssa_data,(name==params$target_name & sex==params$target_sex) | (name==name_i & sex==sex_i)))+
     geom_point(mapping=aes(x=year, y=rank, color=name))+
     geom_line(mapping=aes(x=year, y=rank, color=name))+
-    labs(title=paste("Rank of",target_name,"and",name_i))+
+    labs(title=paste("Rank of",params$target_name,"and",name_i))+
     scale_color_manual(values = c("blue","red"))+
     scale_y_reverse()+
     facet_wrap(~name, scales ="free")
