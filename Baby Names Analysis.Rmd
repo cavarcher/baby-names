@@ -2,17 +2,27 @@
 title: "Baby Names Analysis"
 author: "Connor Lennard"
 date: "2023-02-02"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
 params: 
-  url: "https://www.ssa.gov/oact/babynames/names.zip"
-  target_name: "Name"
-  target_sex: 
-    input: radioButtons
-    label: "Sex"
-    choices: c("Male", "Female")
+  url: 
+    label: "Source URL"
+    value: "https://www.ssa.gov/oact/babynames/names.zip"
+  target_name:
+    label: "Target Name"
+    value: "John"
+    input: text
+  target_sex:
+    label: "Target Sex"
+    value: "M"
+    choices: ["M", "F"]
+    input: radio
   begin_year: 
     label: "Begin Year"
-    value: 1950
+    value: 2000
     input: slider
     min: 1880
     max: 2021
@@ -30,7 +40,11 @@ params:
     label: "Number of Names to Compare"
     value: 100
     input: text
-  comparison_sex: radioButtons(label = "Sex", choices = c("Male", "Female"), selected = "Male")
+  comparison_sex:
+    label: "Comparison Sex"
+    value: "F"
+    choices: ["M", "F"]
+    input: radio
   num_displayed:  
     label: "Number of Names to Display"
     value: 10
@@ -42,17 +56,29 @@ params:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = params$display_progress)
 options(repos = c(CRAN="https://cran.r-project.org/"))
 ```
 
-## Baby Names Analysis
+# Baby Names Analysis
 
-This project is for me to analyze baby name trends in the US. The data comes from <https://www.ssa.gov/oact/babynames/names.zip> and is loaded into a data frame. The goal is to find the names that are most similar to a target name in rank over the years. This is a way for my wife and I to find names we like for our second child given the older sibling's name.
+## Ask
 
-# Load Required Libraries
+Choosing the right name for your baby can be a daunting task, as it will stay with them for a lifetime. An analysis of popular baby names can provide useful insights to help parents make an informed decision. By examining the popularity and trends of different names, parents can get a sense of the cultural and societal influences that impact naming choices. This information can also highlight names that have a significant rise or decline in popularity, making it easier for parents to choose a name that is unique, timeless, and reflective of their personal style and values.
 
-```{r}
+An analysis of baby names can also help parents compare names to sibling names. This is especially important for families with multiple children, as they may want to choose names that complement each other or reflect a certain theme. A comparison of sibling names can also help identify common themes and patterns, such as names that start with the same letter or have similar cultural origins. By considering these factors, parents can ensure that their children's names are not only meaningful and memorable, but also harmonize well with each other, creating a sense of unity within the family.
+
+My task is to compare a target name/sex pair (in this case `r params$target_name`/`r params$target_sex`) to all names of a given sex(`r params$comparison_sex`). I will find the most similar names and display them as options to perspective parents.
+
+This will require the following libraries:
+
+-   dplyr
+-   tidyverse
+-   ggplot2
+-   data.table
+-   shiny
+
+```{r Install Packages, message=FALSE, warning=FALSE, include=FALSE}
 install.packages("dplyr")
 library(dplyr)
 install.packages("tidyverse")
@@ -65,87 +91,30 @@ install.packages("shiny")
 library(shiny)
 ```
 
-# Required Variables
+## Prepare
 
-This is where you can change the source URL if necessary, as well as the years to look at for analysis and the target name for comparison
+I will be using the publicly available data from the Social Security Administration located at `r params$url`. The data is organized into text files for each year between 1880 and 2021. It includes the name, sex and corresponding count for that year. In each file, the data is sorted by sex and then by count.
 
-```{r}
-#url <- "https://www.ssa.gov/oact/babynames/names.zip"
-#target_name <- "Rose"
-#target_sex <- "F"
-#begin_year <- 1880
-#end_year <- 2021
-#num_names <- 1000
-#comparison_sex <- "M"
-#num_displayed <- 10
-#display_progress <- TRUE
-```
+A sample head for `r params$begin_year` is below:
 
-# Functions
-
-These functions are called by the later code.
-
-## Delta_From_Median_Vector
-
-The real workhorse for the project. This function will take a given name, find the overall median of the rank and then calculate the difference by standard deviation in each year. This allows names with dissimilar counts to be compared numerically as to the general shape of the graph. If the name does not appear in the data for a specified year, the rank will be set to the max rank in that year plus one and then the difference from the median will be calculated.
-
-The function should return a data frame with a row for every year that has the target name's deviation from the median as a ratio of the standard deviation
-
-```{r}
-# Return a vector of each year's deviation from the total median
-delta_from_median_vector <- function(names, v_name, v_sex){
-  # Filter the data so it's only for the name and sex specified
-  filtered_list <- names %>%
-    filter(name==v_name & sex==v_sex)
-  
-  #Find the median count
-  med <- summarize(filtered_list, m = median(rank)) %>% 
-        pull(m)
-  #print(summarize(filtered_list, m = median(rank)))
-  std <- summarize(filtered_list, s = sd(rank)) %>% 
-    pull(s)
-  #print(summarize(filtered_list, s = sd(rank)))
-  
-  med_deltas <- data.frame()
-  for (i in params$begin_year:params$end_year){
-    #filter for only the current year's row
-    #should return either one or zero rows
-    year_list <- filtered_list[filtered_list$year==i,]
-    #If the list has more then 0 rows, we have a rank for that year and can
-    #evaluate the difference from median
-    if(nrow(year_list)>0){
-      med_deltas <- rbind(med_deltas, (year_list[1,5]-med)/std)
-      #print(paste(v_name,"delta is",(year_list[1,5]-med)/std,"in",i))
-      #print(year_list)
-    }
-    
-    #If it has zero rows, that name did not appear on the SSA's data for that
-    #that year. Set the rank to the max rank that year+1 and evaluate
-    else{
-      max_rank <- nrow(filter(names, year==i))
-      #print(paste("Max Rank:",max_rank))
-      #print(paste("Median:",med))
-      #print(paste("SD:",std))
-      med_deltas <- rbind(med_deltas, (max_rank+1-med)/std)
-      #print(paste(v_name,"not found in",i,"delta set to",(max_rank+1-med)/std))
-    }
-  }
-  
-  return (med_deltas)
-}
-```
-
-# Code Execution
-
-## SSA_Data
-
-This code will load the specified url and build a data frame with the specified years. If you want to change the year range, change the variables.
-
-```{r}
+```{r Download Data, echo=FALSE}
 #download data from the SSA website
 download.file(params$url, "babynames.zip")
 unzip("babynames.zip")
-#build the data frame with all names between the two years
+
+
+#Print the head for the first year
+print(head(read.table(paste("yob",params$begin_year,".txt",sep=""),sep=",")))
+```
+
+## Process
+
+I will use R to analyze the full data set for the social security administration. The data is from 1880 to 2021 but I can narrow my focus based on our parameters. This allows me to run the code faster if necessary and focus on specific time frames based on parent needs.
+
+Now that the data has been downloaded, I will load it into a data frame with the columns I need. I'll add a year column based on the file name and rank the name/sex pairs by count only instead of by sex then count. I will then add a column with the rank of the pair in that year.
+
+```{r Build ssa_data, include=FALSE}
+#build the data frame with all name/sex pairs between the two years
 #columns will be name, sex, count, year and rank
 ssa_data <- data.frame()
   
@@ -174,7 +143,7 @@ for (x in params$begin_year:params$end_year){
     
   #add rank as the fifth column
   year_names <- year_names %>%
-    mutate(rank = row_number())
+    mutate(year_names, rank = row_number())
     
   #Add the final data frame for the year onto ssa_data
   ssa_data <- rbind(ssa_data,year_names)
@@ -187,16 +156,20 @@ colnames(ssa_data) <- c("name","sex","count","year", "rank")
 rownames(ssa_data) <- NULL
 ```
 
-## Unique_Names
+The head for the resultant data frame ssa_data is below:
 
-Make a list of unique names from the data and find the total count over all years. You should only need to run this once.
+```{r Print Data Head, echo=FALSE}
+print(head(ssa_data))
+```
 
-```{r}
+I will now make a data frame of all the unique name/sex pairs in the data set. It will also include the total count across all years. I will order the data frame by count (decreasing) so that I can compare my target name to the top `r params$num_names` pair(s). This allows me to compare it to all pairs if necessary or to speed up the data processing by limiting my scope.
+
+```{r Unique Names, echo=FALSE}
 #Create a new data table (uses keys)
 unique_names <- data.table(ssa_data)
-#Set the key to the union of name a sex
+#Set the key to the name/sex pair
 setkey(unique_names, name, sex)
-#Make dt a data table with unique rows for name and sex. Include a 3rd column that totals all counts of the name and sex across all years
+#Make a data table with unique rows for name and sex. Include a 3rd column that totals all counts of the name and sex across all years
 unique_names <- unique_names[, sum(count), by=list(name,sex)]
 #Name the columns
 names(unique_names) <- c("name", "sex", "total")
@@ -204,11 +177,13 @@ names(unique_names) <- c("name", "sex", "total")
 unique_names <- as.data.frame(unique_names[order(unique_names$total, decreasing=TRUE),])
 #Reset the row names
 rownames(unique_names) <- NULL
+
+print(head(unique_names))
 ```
 
-## Optional File Write
+Now that we have all unique name/sex pairs over the years and the total count, I can save to csv files if desired and prepare to analyze.
 
-```{r}
+```{r Save CSV files}
 #Use this line to write a .csv with the full name data if desired
 
 write.csv(ssa_data, "Social_Security_Names_by_Year.csv", row.names=TRUE)
@@ -216,17 +191,83 @@ write.csv(ssa_data, "Social_Security_Names_by_Year.csv", row.names=TRUE)
 write.csv(unique_names, "Unique_Names_By_Total_Count.csv", row.names=TRUE)
 ```
 
-## Find the Closest Names
+## Analyze
 
-Go through the list of name, given a target name, get a vector of all unique names ordered by sameness to the target name
+I decided to give perspective parents a list of the top name/sex pairs that had a similar shape to the given sibling pair. The Social Security data does not have any information about country of origin or history of the name but by finding pairs that had similar trends over time to a pair the parents already like, I will be able to deliver appropriate results.
 
-```{r}
-#Find the list of the target name's deviation from the median
+The main calculation I will be performing is in a function called delta_from_median_vector.
+
+### delta_from_median_vector
+
+**Description:** Takes a data frame of name/sex pairs, counts and years and returns a vector of a specified pair's deviation from the median in each specific year. Deviation is given in terms of standard deviation.
+
+**Arguments:**
+
+|        |                                                                            |
+|-----------------------|-------------------------------------------------|
+| names  | The data frame of name, sex, count, year and rank across the years desired |
+| v_name | The name to analyze                                                        |
+| v_sex  | The sex to analyze                                                         |
+
+**Value:**
+
+For `delta_from_median_vector` a vector of length `r params$end_year` - `r params$begin_year` with elements that are the deviation each year from the median in standard deviation.
+
+**Details:** This function will take a given name/sex pair, find the overall median of the rank and then calculate the difference by standard deviation in each year. This allows pairs with dissimilar counts to be compared numerically as to the general shape of the graph. If the pair does not appear in the data for a specified year, the rank will be set to the max rank in that year plus one and then the difference from the median will be calculated.
+
+I decided to use rank instead of count because rank is more normalized over time. If I used count, every pair would tend to have an upward slope due to increasing population.
+
+```{r delta_from_median_vector, echo=TRUE}
+# Return a vector of each year's deviation from the total median
+delta_from_median_vector <- function(names, v_name, v_sex){
+  # Filter the data so it's only for the pair specified
+  filtered_list <- names %>%
+    filter(name==v_name & sex==v_sex)
+  
+  #Find the median count
+  med <- summarize(filtered_list, m = median(rank)) %>% 
+        pull(m)
+  std <- summarize(filtered_list, s = sd(rank)) %>% 
+    pull(s)
+  
+  med_deltas <- data.frame()
+  for (i in params$begin_year:params$end_year){
+    #filter for only the current year's row
+    #should return either one or zero rows
+    year_list <- filtered_list[filtered_list$year==i,]
+    #If the list has more then 0 rows, we have a rank for that year and can
+    #evaluate the difference from median
+    if(nrow(year_list)>0){
+      med_deltas <- rbind(med_deltas, (year_list[1,5]-med)/std)
+    }
+    
+    #If it has zero rows, that pair did not appear on the SSA's data for that
+    #that year. Set the rank to the max rank that year+1 and evaluate
+    else{
+      max_rank <- nrow(filter(names, year==i))
+      med_deltas <- rbind(med_deltas, (max_rank+1-med)/std)
+    }
+  }
+  
+  return (med_deltas)
+}
+```
+
+### Find the Closest Names
+
+Now I will find the delta vector for my target name/sex pair. I will then iterate through the list of unique pairs and find the delta vectors. I fill a data frame called result_list with the compared pairs and a measure of the sameness to the target pair. That is just the sum of the differences of each year between the two pairs.
+
+The delta vectors should have the max rank for any years that the pair does not appear but I have error handling just in case. If there are any issues, the program will drop that pair from comparison.
+
+The result_list data frame is ordered by difference (increasing).
+
+```{r Find Closest Names, echo=TRUE}
+#Find the list of the target name/sex pair's deviation from the median
 target_name_delta <- delta_from_median_vector(ssa_data, params$target_name, params$target_sex)
 
 #new data frame for the result after the for loop
 result_list <- data.frame()
-#iterate through each name and find the delta number.
+#iterate through each name/sex pair and find the delta number.
 #add to a data frame with name, sex and delta number
 last_percent <- -1
 for(i in 1:min(nrow(unique_names),params$num_names)){
@@ -240,7 +281,7 @@ for(i in 1:min(nrow(unique_names),params$num_names)){
 
   }
   
-  #error handling for names that do not have a rank every year.
+  #error handling for name/sex pairs that do not have a rank every year.
   tryCatch(
     {
       name_i <- unique_names[i,1]
@@ -259,24 +300,80 @@ colnames(result_list) <- c("name", "sex", "difference")
 result_list <- result_list[order(as.double(result_list$difference)),]
 ```
 
-## Visualize
+This is the head of the resultant list. I can check the function worked by verifying that `r params$target_name`/`r params$target_sex` is the first item with a difference of 0. I will not display this going forward.
 
-Visualize top names as specified in the variables. Displayed as a line graph of rank
+```{r Result List, echo=FALSE}
+print(head(result_list, n = params$num_displayed+1))
+```
 
-```{r}
-filtered_list <- filter(result_list, sex==params$comparison_sex)
-for (i in 1:min(params$num_displayed,nrow(result_list))){
-  name_i <- filtered_list[i,1]
-  sex_i <- filtered_list[i,2]
-  print(paste("Comparing",params$target_name,"and",name_i))
-  print(
-    ggplot(filter(ssa_data,(name==params$target_name & sex==params$target_sex) | (name==name_i & sex==sex_i)))+
+## Share
+
+I now have a list of names ordered by similarity to `r params$target_name`/`r params$target_sex`. I'll filter it by `r params$comparison_sex` and will display the head below along of the line graphs.
+
+```{r Filtered Result List, echo=FALSE}
+#if the target_sex is the same as comparison_sex, add one to the displays to correct for the target name/sex pair being in the display list
+
+add_val <- 0
+if(params$target_sex==params$comparison_sex)
+  add_val <- 1
+
+print(head(filter(result_list, sex==params$comparison_sex), n=add_val+params$num_displayed))
+
+```
+
+### `r params$target_name`/`r params$target_sex` Rank Trend from `r params$being_year` to `r params$end_year`
+
+```{r Target Name Graph, echo=FALSE}
+print(
+    ggplot(filter(ssa_data,(name==params$target_name & sex==params$target_sex)))+
     geom_point(mapping=aes(x=year, y=rank, color=name))+
     geom_line(mapping=aes(x=year, y=rank, color=name))+
-    labs(title=paste("Rank of",params$target_name,"and",name_i))+
+    labs(title=paste("Rank of",params$target_name))+
     scale_color_manual(values = c("blue","red"))+
-    scale_y_reverse()+
-    facet_wrap(~name, scales ="free")
+    scale_y_reverse()
+)
+```
+
+### Top `r params$num_displayed` Most Similar Pairs
+
+```{r Display Similar Graphs, echo=FALSE}
+
+filtered_list <- filter(result_list, sex==params$comparison_sex)
+for (i in 1+add_val:min(params$num_displayed,nrow(result_list))+add_val){
+  name_i <- filtered_list[i,1]
+  sex_i <- filtered_list[i,2]
+  print(
+    ggplot(filter(ssa_data,(name==name_i & sex==sex_i)))+
+    geom_point(mapping=aes(x=year, y=rank, color=name))+
+    geom_line(mapping=aes(x=year, y=rank, color=name))+
+    labs(title=paste("Rank of",name_i))+
+    scale_color_manual(values = c("blue","red"))+
+    scale_y_reverse()
     )
 }
 ```
+
+### `r params$num_displayed` Most Dissimilar Pairs
+
+These are the bottom `r params$num_displayed` name/sex pairs for comparison. Note how the graphs a very different compared to the top pairs.
+
+```{r Display Different Graphs, echo=FALSE}
+
+filtered_list <- filter(result_list, sex==params$comparison_sex)
+for (i in 0:min(params$num_displayed,nrow(result_list))){
+  name_i <- filtered_list[nrow(filtered_list)-i,1]
+  sex_i <- filtered_list[nrow(filtered_list)-i,2]
+  print(
+    ggplot(filter(ssa_data,(name==name_i & sex==sex_i)))+
+    geom_point(mapping=aes(x=year, y=rank, color=name))+
+    geom_line(mapping=aes(x=year, y=rank, color=name))+
+    labs(title=paste("Rank of",name_i))+
+    scale_color_manual(values = c("blue","red"))+
+    scale_y_reverse()
+    )
+}
+```
+
+## Act
+
+Now is the time to decide on a name! Parents can change the parameters to run additional reports, perhaps using the full data set or only since their own birth.
