@@ -39,7 +39,7 @@ params:
   num_names: 
     label: "Number of Names to Compare"
     value: 100
-    input: text
+    input: numeric
   comparison_sex:
     label: "Comparison Sex"
     value: "F"
@@ -48,7 +48,7 @@ params:
   num_displayed:  
     label: "Number of Names to Display"
     value: 10
-    input: text
+    input: numeric
   display_progress:
     label: "Display Console"
     input: checkbox
@@ -59,8 +59,6 @@ params:
 knitr::opts_chunk$set(echo = params$display_progress)
 options(repos = c(CRAN="https://cran.r-project.org/"))
 ```
-
-# Baby Names Analysis
 
 ## Ask
 
@@ -245,7 +243,7 @@ delta_from_median_vector <- function(names, v_name, v_sex){
     #that year. Set the rank to the max rank that year+1 and evaluate
     else{
       max_rank <- nrow(filter(names, year==i))
-      med_deltas <- rbind(med_deltas, (max_rank+1-med)/std)
+      med_deltas <- rbind(med_deltas, (max_rank+1L-med)/std)
     }
   }
   
@@ -303,7 +301,7 @@ result_list <- result_list[order(as.double(result_list$difference)),]
 This is the head of the resultant list. I can check the function worked by verifying that `r params$target_name`/`r params$target_sex` is the first item with a difference of 0. I will not display this going forward.
 
 ```{r Result List, echo=FALSE}
-print(head(result_list, n = params$num_displayed+1))
+print(head(result_list, n = 1L + params$num_displayed))
 ```
 
 ## Share
@@ -321,7 +319,7 @@ print(head(filter(result_list, sex==params$comparison_sex), n=add_val+params$num
 
 ```
 
-### `r params$target_name`/`r params$target_sex` Rank Trend from `r params$being_year` to `r params$end_year`
+### `r params$target_name`/`r params$target_sex` Rank Trend from `r params$begin_year` to `r params$end_year`
 
 ```{r Target Name Graph, echo=FALSE}
 print(
